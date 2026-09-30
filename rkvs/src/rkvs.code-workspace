@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		},
+		{
+			"path": "../../../study"
+		},
+		{
+			"path": "../../../rbench"
+		}
+	],
+	"settings": {}
+}
