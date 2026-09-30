@@ -28,23 +28,44 @@ fn handle_client(mut stream:TcpStream,kvs:&Kvs){
     let received = String::from_utf8_lossy(&buf[..n]);
     println!("{}",received);
 
-    match stream.write(b"OK\n"){
-        Ok(_)=>{},
-        Err(e)=>eprintln!("write error: {}",e)
+    // 受け取った文字列を1行ずつコマンドとして処理し、結果をクライアントに返す
+    let mut response = String::new();
+    for line in received.lines(){
+        if line.trim().is_empty(){
+            continue;
+        }
+        response.push_str(&execute_command(kvs,line));
+        response.push('\n');
     }
 
-    match kvs.set("hello", "world"){
-        Some(s)=> println!("map had same key and value was updated./n before key is {}",s),
-        None=> println!("map didn't have same key"),
-    };
-    match kvs.get("hello"){
-        Some(s)=> println!("value is {}",s),
-        None=> println!("key,value was not found.")
+    if let Err(e) = stream.write_all(response.as_bytes()){
+        eprintln!("write error: {}",e);
     }
-    kvs.del("hello");
-    match kvs.get("hello"){
-        Some(s)=> println!("key was deleted.value was {}",s),
-        None => println!("key was None when try deleting"),
+}
+
+// "GET key" / "SET key value" / "DEL key" をKvsのメソッドに振り分ける
+// SETのvalueは空白を含んでもよい(keyの後ろ全部をvalueとする)
+fn execute_command(kvs:&Kvs,line:&str)->String{
+    let mut parts = line.trim().splitn(3,char::is_whitespace);
+    let cmd = parts.next().unwrap_or("").to_uppercase();
+    let key = parts.next();
+    let value = parts.next().map(|v| v.trim());
+
+    match (cmd.as_str(),key,value){
+        ("GET",Some(k),None)=>match kvs.get(k){
+            Some(v)=>v,
+            None=>"(nil)".to_string(),
+        },
+        ("SET",Some(k),Some(v)) if !v.is_empty()=>match kvs.set(k,v){
+            Some(_)=>"OK (updated)".to_string(),
+            None=>"OK".to_string(),
+        },
+        ("DEL",Some(k),None)=>match kvs.del(k){
+            Some(_)=>"OK".to_string(),
+            None=>"(nil)".to_string(),
+        },
+        ("GET",..)|("SET",..)|("DEL",..)=>"ERR wrong number of arguments (GET key | SET key value | DEL key)".to_string(),
+        _=>format!("ERR unknown command '{}'",cmd),
     }
 }
 
